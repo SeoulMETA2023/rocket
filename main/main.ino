@@ -2,7 +2,7 @@
 #include <Servo.h>
 #include <SoftwareSerial.h>
 #define LOOPTARGET 20
-#define mpu_add 0x68  // MPU6050 주소
+#define mpu_add 0x68  // MPU6050
 #define SERVO_PIN_1 9
 #define SERVO_PIN_2 10
 #define SERVO_PIN_3 11
