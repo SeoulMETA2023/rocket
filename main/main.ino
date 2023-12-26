@@ -2,7 +2,7 @@
 #include <Servo.h>
 #include <SoftwareSerial.h>
 #define LOOPTARGET 20
-#define mpu_add 0x68  // MPU6050
+#define mpu_add 0x68  // MPU6050 주소
 #define SERVO_PIN_1 9
 #define SERVO_PIN_2 10
 #define SERVO_PIN_3 11
@@ -67,7 +67,31 @@ private:
   double P[2][2], K[2];
 };
 
+/*class PIDcontrol {
+public:
+  void init(double kp, double ki, double kd) {
+    Kp = kp;
+    Ki = ki;
+    Kd = kd;
+    lastError = 0;
+    integral = 0;
+  }
+  double calculate(double setpoint, double currentValue, double dt) {
+    double error = setpoint - currentValue;
+    integral += error * dt;
+    double derivative = (error - lastError) / dt;
+    lastError = error;
+    return Kp * error + Ki * integral + Kd * derivative;
+  }
+private:
+
+  double Kp, Ki, Kd;  double lastError;
+  double integral;
+};*/
+
+
 Kalman kalmanRoll, kalmanPitch, kalmanYaw;
+//PIDController pidRoll, pidPitch, pidYaw;
 long ac_x, ac_y, ac_z, gy_x, gy_y, gy_z;
 double roll, pitch, yaw;
 double dt;
@@ -86,7 +110,7 @@ void rocketInit() {
   Wire.endTransmission(true);
   kalmanRoll.init(0.001, 0.002, 0.001);
   kalmanPitch.init(0.001, 0.002, 0.001);
-  kalmanYaw.init(0.01, 0.002, 0.001);
+  kalmanYaw.init(0.001, 0.002, 0.001);
   targetRoll = 0;
   targetPitch = 0;
   targetYaw = 0;
@@ -113,35 +137,40 @@ void readIMU(){
   gy_z = Wire.read() << 8 | Wire.read();
 }
 
-void calcIMU(double ax, double ay, double az, double gx, double gy, double gz) {
-  roll = atan2(ay, az) * RAD_TO_DEG;
-  pitch = atan2(-ax, sqrt(ay * ay + az * az)) * RAD_TO_DEG;
-  yaw = atan2(gy, gx) * RAD_TO_DEG;
+void calcIMU() {
+  roll = atan2(ac_y, ac_z) * RAD_TO_DEG;
+  pitch = atan2(ac_x, sqrt(ac_y * ac_y + ac_z * ac_z)) * RAD_TO_DEG;
+  yaw = atan2(gy_y, gy_x) * RAD_TO_DEG;
 
 }
+
+/*void PID {
+
+}*/
 
 void printSerial(){
   Serial.print(roll);
   Serial.print("\t");
   Serial.print(pitch);
   Serial.print("\t");
-  Serial.println(yaw);
-}  
-unsigned long last = 0;
-void setup() { 
+  Serial.println();
+}
+unsigned long last = 20;
+void setup() {
   rocketInit();
 }
 
 void loop() {
-  if(millis()-last > LOOPTARGET){
+  if (millis() - pasttime > LOOPTARGET) {
     readIMU();
     calcIMU();
-    PID();
+    printSerial();
+    /*PID();
     writeRCS();
     readSensors();
     writeServo();
     teleRead();
-    teleWrite();
+    teleWrite();*/
     last = millis();
   }
 }
