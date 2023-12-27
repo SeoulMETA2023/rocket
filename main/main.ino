@@ -129,15 +129,25 @@ void calcIMU() {
   roll = kalmanRoll.getKalman(acc_roll, gyro_roll, dt);
   pitch = kalmanPitch.getKalman(acc_pitch, gyro_pitch, dt);
   yaw = kalmanYaw.getKalman(gy_z, gy_z, dt); 
+  /*roll = atan2(ac_y, ac_z) * RAD_TO_DEG;
+  pitch = atan2(-ac_x, sqrt(ac_y * ac_y + ac_z * ac_z)) * RAD_TO_DEG;
+  yaw = atan2(gy_y, gy_x) * RAD_TO_DEG;*/
+
 }
 
 
 void printSerial() {
+  /*Serial.print(roll);
+  Serial.print(",");
+  Serial.print(pitch);
+  Serial.print(yaw);
+  Serial.print(",");*/
   Serial.print(roll);
   Serial.print(",");
   Serial.print(pitch);
   Serial.print(",");
   Serial.println(yaw);
+  
 }
 
 
