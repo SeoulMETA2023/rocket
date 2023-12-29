@@ -1,134 +1,15 @@
 #include <Wire.h>
 
 #define mpu_add 0x68  //mpu6050 address
-#define kp 1
+#define A 8
+#define B 9
+#define C 10
+#define D 11
+
+#define kp 5
 #define ki 0.1
 #define kd 0.01
-#define threshold 20
-
-class kalman {
-
-  public :
-
-    double getkalman(double acc, double gyro, double dt) {
-
-      //project the state ahead
-
-      angle += dt * (gyro - bias) ;
-      //Project the error covariance ahead
-
-      P[0][0] += dt * (dt * P[1][1] - P[0][1] - P[1][0] + Q_angle) ;
-
-      P[0][1] -= dt * P[1][1] ;
-
-      P[1][0] -= dt * P[1][1] ;
-
-      P[1][1] += Q_gyro * dt ;
-
-
-
-      //Compute the Kalman gain
-
-      double S = P[0][0] + R_measure ;
-
-      K[0] = P[0][0] / S ;
-
-      K[1] = P[1][0] / S ;
-
-
-
-      //Update estimate with measurement z
-
-      double y = acc - angle ;
-
-      angle += K[0] * y ;
-
-      bias += K[1] * y ;
-
-
-
-      //Update the error covariance
-
-      double P_temp[2] = {P[0][0], P[0][1]} ;
-
-      P[0][0] -= K[0] * P_temp[0] ;
-
-      P[0][1] -= K[0] * P_temp[1] ;
-
-      P[1][0] -= K[1] * P_temp[0] ;
-
-      P[1][1] -= K[1] * P_temp[1] ;
-
-
-
-      return angle ;
-
-    } ;
-
-    void init(double angle, double gyro, double measure) {
-
-      Q_angle = angle ;
-
-      Q_gyro = gyro ;
-
-      R_measure = measure ;
-
-
-
-      angle = 0 ;
-
-      bias = 0 ;
-
-
-
-      P[0][0] = 0 ;
-
-      P[0][1] = 0 ;
-
-      P[1][0] = 0 ;
-
-      P[1][1] = 0 ;
-
-    } ;
-
-    double getvar(int num) {
-
-      switch (num) {
-
-        case 0 :
-
-          return Q_angle ;
-
-          break ;
-
-        case 1 :
-
-          return Q_gyro ;
-
-          break ;
-
-        case 2 :
-
-          return R_measure ;
-
-          break ;
-
-      }
-
-    } ;
-
-  private :
-
-    double Q_angle, Q_gyro, R_measure ;
-
-    double angle, bias ;
-
-    double P[2][2], K[2] ;
-
-} ;
-
-
-kalman kal ;
+#define threshold 30
 
 long ac_x, ac_y, ac_z, gy_x, gy_y, gy_z ;
 
@@ -150,23 +31,19 @@ void PID();
 void printSerial();
 void RCS();
 void tele();
+void dataLog();
 
 void setup() {
+  pinMode(A,OUTPUT);
+  pinMode(B,OUTPUT);
+
   Serial.begin(9600) ;
   Wire.begin() ;
   Wire.beginTransmission(mpu_add) ;
   Wire.write(0x6B) ;
   Wire.write(0) ;
   Wire.endTransmission(true) ;
-  kal.init(0.001, 0.003, 0.03) ;  //init kalman filter
-  Serial.println() ;
-  Serial.print("parameter") ;
-  Serial.print("\t") ;
-  Serial.print(kal.getvar(0), 4) ;
-  Serial.print("\t") ;
-  Serial.print(kal.getvar(1), 4) ;
-  Serial.print("\t") ;
-  Serial.println(kal.getvar(2), 4) ;
+  Serial.println("Start");
 }
 
 
@@ -179,7 +56,7 @@ void loop() {
     PID();
     RCS();
     tele();
-
+    dataLog();
     lastTime = millis();
   }
 }
@@ -202,38 +79,76 @@ void readIMU(){
 }
 
 void calcIMU(){
-  pitch_acc = atan2(ac_x, ac_z) * 180 / PI ;  //acc data to degree data
-  pitch_gy = gy_y/131. ;
-  pitch_theta = kal.getkalman(pitch_acc,pitch_gy,dt);
+  pitch_acc = atan(ac_y/sqrt(ac_x*ac_x+ac_z*ac_z)) * 180 / PI ;  //acc data to degree data
+  pitch_gy = gy_x/131. ;
+  pitch_theta = 0.95*(pitch_theta+pitch_gy*dt)+0.05*(pitch_acc);
 
-  yaw_acc = atan2(ac_y, ac_z) * 180 / PI ;  //acc data to degree data
+  yaw_acc = atan(ac_x/sqrt(ac_y*ac_y+ac_z*ac_z)) * 180 / PI ;  //acc data to degree data
   yaw_gy = gy_y/131. ;
-  yaw_theta = kal.getkalman(yaw_acc,yaw_gy,dt);
+  yaw_theta = 0.95*(yaw_theta+yaw_gy*dt)+0.05*(yaw_acc);
 }
 
 void PID(){ 
   pitch_integralTheta += dt * pitch_theta;
   pitch_alpha = (pitch_theta-pitch_lastTheta)/dt;
   pitch_PID = kp * pitch_theta + ki * pitch_integralTheta + kd * pitch_alpha;
+  if(pitch_PID > 200) pitch_PID = 0;
+  if(pitch_PID < -200) pitch_PID = 0;
 
   yaw_integralTheta += dt * yaw_theta;
   yaw_alpha = (yaw_theta-yaw_lastTheta)/dt;
   yaw_PID = kp * yaw_theta + ki * yaw_integralTheta + kd * yaw_alpha;
+  if(yaw_PID > 200) yaw_PID = 0;
+  if(yaw_PID < -200) yaw_PID = 0;
 }
 
 void RCS(){
-  
+  //Serial.println(pitch_PID);
+  if(pitch_PID > threshold){
+    digitalWrite(A,HIGH);
+    digitalWrite(C,LOW);
+    Serial.println("A");
+  }
+  else if(pitch_PID < -threshold){
+    digitalWrite(C,HIGH);
+    digitalWrite(A,LOW);
+    Serial.println("B");
+  }
+  else{
+    digitalWrite(C,LOW);
+    digitalWrite(A,LOW);
+  }
+
+
+  if(yaw_PID > threshold){
+    digitalWrite(B,HIGH);
+    digitalWrite(D,LOW);
+    Serial.println("A");
+  }
+  else if(yaw_PID < -threshold){
+    digitalWrite(D,HIGH);
+    digitalWrite(B,LOW);
+    Serial.println("B");
+  }
+  else{
+    digitalWrite(B,LOW);
+    digitalWrite(D,LOW);
+  }
+
+
 }
 
 void printSerial(){
-  Serial.print("kalman pitch") ;
-  Serial.print("\t") ;
-  Serial.print(pitch_theta) ;
-  Serial.print("\t kalman yaw") ;
-  Serial.print("\t") ;
-  Serial.println(yaw_theta) ;
+  //Serial.print("pitch : ");
+  //Serial.print(pitch_theta);
+  //Serial.print("\t yaw : ");
+  //Serial.println(yaw_theta);
 }
 
 void tele(){
+  
+}
+
+void dataLog(){
 
 }
